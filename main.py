@@ -95,34 +95,40 @@ if not user_prompt:
     print("Usage: python main.py <prompt>")
     sys.exit(1)
 
+verbose = '--verbose' in sys.argv
 messages = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
-
 # Initialize the Google GenAI client
 client = genai.Client(api_key=api_key)
 
-response = client.models.generate_content(
-    model='gemini-2.0-flash-001', contents=messages, config=types.GenerateContentConfig(
-    tools=[available_functions], system_instruction=system_prompt
-    ),
-)
-
-# Add verbose flag if specified
-verbose = '--verbose' in sys.argv
-if hasattr(response, "function_calls") and response.function_calls:
-    function_call = response.function_calls[0]
-    function_call_result = call_function(function_call, verbose=verbose)
-    # Check for function response
-    if not (hasattr(function_call_result, "parts") and function_call_result.parts and hasattr(function_call_result.parts[0], "function_response") and hasattr(function_call_result.parts[0].function_response, "response")):
-        raise RuntimeError("Fatal: No function response in call_function result.")
-    response_dict = function_call_result.parts[0].function_response.response
-    # Print only the result value if it exists and is a string
-    result_value = response_dict.get("result")
-    if verbose:
-        print(f"-> {result_value}")
-    else:
-        print(result_value)
-else:
+max_iterations = 20
+for i in range(max_iterations):
+    response = client.models.generate_content(
+        model='gemini-2.0-flash-001',
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt
+        ),
+    )
+    # Add all model candidates to the conversation
+    for candidate in getattr(response, "candidates", []):
+        if hasattr(candidate, "content"):
+            messages.append(candidate.content)
+    # If a function call is present, call it and add the result to messages
+    if hasattr(response, "function_calls") and response.function_calls:
+        function_call = response.function_calls[0]
+        function_call_result = call_function(function_call, verbose=verbose)
+        messages.append(function_call_result)
+        # Optionally print the result if verbose
+        response_dict = function_call_result.parts[0].function_response.response
+        result_value = response_dict.get("result")
+        if verbose:
+            print(f"-> {result_value}")
+        continue  # Go to next iteration
+    # If no function call, print the final response and break
     print(getattr(response, "text", ""))
+    break
+else:
+    print("Max iterations reached. Agent stopped.")
 
 if verbose:
     print(f"User prompt: {user_prompt}")

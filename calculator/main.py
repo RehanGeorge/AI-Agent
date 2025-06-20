@@ -5,6 +5,11 @@ from pkg.calculator import Calculator
 from pkg.render import render
 
 
+def format_expression(expression):
+    formatted_expression = expression.replace('+', ' + ').replace('-', ' - ').replace('*', ' * ').replace('/', ' / ')
+    return " ".join(formatted_expression.split())
+
+
 def main():
     calculator = Calculator()
     if len(sys.argv) <= 1:
@@ -14,6 +19,7 @@ def main():
         return
 
     expression = " ".join(sys.argv[1:])
+    expression = format_expression(expression)
     try:
         result = calculator.evaluate(expression)
         to_print = render(expression, result)
